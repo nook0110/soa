@@ -1,0 +1,207 @@
+specification {
+  element person
+  element system
+  element container
+}
+
+model {
+  person buyer {
+    -> marketplace.frontend 'uses'
+  }
+  
+  person seller {
+    -> marketplace.frontend 'uses'
+  }
+
+  system marketplace {
+    
+    container frontend {
+      technology 'React, JavaScript'
+      description 'Web application for buyers and sellers'
+    }
+
+    container apiGateway {
+      technology 'Nginx/Kong'
+      description 'API Gateway - routes requests to services'
+    }
+
+    container userSvc {
+      technology 'Python, Flask'
+      description 'User Service - authentication and profiles'
+    }
+
+    container productSvc {
+      technology 'Python, Flask'
+      description 'Product Service - catalog and inventory'
+    }
+
+    container orderSvc {
+      technology 'Python, Flask'
+      description 'Order Service - order management'
+    }
+
+    container paymentSvc {
+      technology 'Python, Flask'
+      description 'Payment Service - payment processing'
+    }
+
+    container notifySvc {
+      technology 'Python, Flask'
+      description 'Notification Service - sends notifications'
+    }
+
+    container recommendSvc {
+      technology 'Python, Flask'
+      description 'Recommendation Service - personalized feed'
+    }
+
+    container userDb {
+      technology 'MySQL'
+      description 'User database'
+    }
+
+    container productDb {
+      technology 'MySQL'
+      description 'Product database'
+    }
+
+    container orderDb {
+      technology 'MySQL'
+      description 'Order database'
+    }
+
+    container paymentDb {
+      technology 'MySQL'
+      description 'Payment database'
+    }
+
+    container notifyDb {
+      technology 'MySQL'
+      description 'Notification database'
+    }
+
+    container recommendDb {
+      technology 'MySQL'
+      description 'Recommendation database'
+    }
+
+    container msgQueue {
+      technology 'RabbitMQ'
+      description 'Message queue for async communication'
+    }
+  }
+  
+  marketplace.frontend -> marketplace.apiGateway 'makes API calls'
+  
+  marketplace.apiGateway -> marketplace.userSvc 'routes to'
+  marketplace.apiGateway -> marketplace.productSvc 'routes to'
+  marketplace.apiGateway -> marketplace.orderSvc 'routes to'
+  marketplace.apiGateway -> marketplace.paymentSvc 'routes to'
+  marketplace.apiGateway -> marketplace.recommendSvc 'routes to'
+  
+  marketplace.userSvc -> marketplace.userDb 'reads/writes'
+  marketplace.productSvc -> marketplace.productDb 'reads/writes'
+  marketplace.orderSvc -> marketplace.orderDb 'reads/writes'
+  marketplace.paymentSvc -> marketplace.paymentDb 'reads/writes'
+  marketplace.notifySvc -> marketplace.notifyDb 'reads/writes'
+  marketplace.recommendSvc -> marketplace.recommendDb 'reads/writes'
+  
+  marketplace.orderSvc -> marketplace.userSvc 'validates user'
+  marketplace.orderSvc -> marketplace.productSvc 'checks inventory'
+  marketplace.orderSvc -> marketplace.paymentSvc 'processes payment'
+  marketplace.orderSvc -> marketplace.msgQueue 'publishes events'
+  
+  marketplace.msgQueue -> marketplace.notifySvc 'delivers events'
+  marketplace.msgQueue -> marketplace.recommendSvc 'delivers events'
+}
+
+views {
+  view containerView {
+    include
+      buyer,
+      seller,
+      marketplace.frontend,
+      marketplace.apiGateway,
+      marketplace.userSvc,
+      marketplace.productSvc,
+      marketplace.orderSvc,
+      marketplace.paymentSvc,
+      marketplace.notifySvc,
+      marketplace.recommendSvc,
+      marketplace.userDb,
+      marketplace.productDb,
+      marketplace.orderDb,
+      marketplace.paymentDb,
+      marketplace.notifyDb,
+      marketplace.recommendDb,
+      marketplace.msgQueue
+    
+    style buyer {
+      shape person
+    }
+    
+    style seller {
+      shape person
+    }
+    
+    style marketplace.frontend {
+      shape browser
+    }
+    
+    style marketplace.apiGateway {
+      shape component
+    }
+    
+    style marketplace.userSvc {
+      shape component
+    }
+    
+    style marketplace.productSvc {
+      shape component
+    }
+    
+    style marketplace.orderSvc {
+      shape component
+    }
+    
+    style marketplace.paymentSvc {
+      shape component
+    }
+    
+    style marketplace.notifySvc {
+      shape component
+    }
+    
+    style marketplace.recommendSvc {
+      shape component
+    }
+    
+    style marketplace.userDb {
+      shape storage
+    }
+    
+    style marketplace.productDb {
+      shape storage
+    }
+    
+    style marketplace.orderDb {
+      shape storage
+    }
+    
+    style marketplace.paymentDb {
+      shape storage
+    }
+    
+    style marketplace.notifyDb {
+      shape storage
+    }
+    
+    style marketplace.recommendDb {
+      shape storage
+    }
+    
+    style marketplace.msgQueue {
+      shape queue
+    }
+  }
+}
