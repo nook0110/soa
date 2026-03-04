@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Databases
+  auth-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_pass
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - marketplace-network
+
+  product-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: product_db
+      POSTGRES_USER: product_user
+      POSTGRES_PASSWORD: product_pass
+    volumes:
+      - product_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product_user -d product_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - marketplace-network
+
+  # Services
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./auth-service/Dockerfile
+    ports:
+      - "5001:5001"
+      - "50051:50051"
+    environment:
+      DATABASE_URL: postgresql://auth_user:auth_pass@auth-db:5432/auth_db
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production-12345678}
+      JWT_ACCESS_TOKEN_EXPIRES: 900
+      JWT_REFRESH_TOKEN_EXPIRES: 604800
+      FLASK_PORT: 5001
+      GRPC_PORT: 50051
+      LOG_LEVEL: INFO
+      ENVIRONMENT: development
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - marketplace-network
+
+  product-service:
+    build:
+      context: .
+      dockerfile: ./product-service/Dockerfile
+    ports:
+      - "5002:5002"
+      - "50052:50052"
+    environment:
+      DATABASE_URL: postgresql://product_user:product_pass@product-db:5432/product_db
+      AUTH_GRPC_HOST: auth-service:50051
+      FLASK_PORT: 5002
+      GRPC_PORT: 50052
+      LOG_LEVEL: INFO
+      ENVIRONMENT: development
+    depends_on:
+      product-db:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - marketplace-network
+
+  # API Gateway
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - product-service
+    restart: unless-stopped
+    networks:
+      - marketplace-network
+
+volumes:
+  auth_db_data:
+  product_db_data:
+
+networks:
+  marketplace-network:
+    driver: bridge

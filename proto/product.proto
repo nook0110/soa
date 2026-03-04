@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package product;
+
+import "common.proto";
+
+service ProductService {
+  rpc GetProduct(GetProductRequest) returns (ProductResponse);
+  rpc GetProducts(GetProductsRequest) returns (GetProductsResponse);
+  rpc CheckStock(CheckStockRequest) returns (CheckStockResponse);
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+  rpc ReleaseStock(ReleaseStockRequest) returns (ReleaseStockResponse);
+  rpc ValidateProductOwnership(ValidateOwnershipRequest) returns (ValidateOwnershipResponse);
+}
+
+message GetProductRequest {
+  string product_id = 1;
+}
+
+message ProductResponse {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  double price = 4;
+  int32 stock = 5;
+  string category = 6;
+  string status = 7;
+  string seller_id = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}
+
+message GetProductsRequest {
+  repeated string product_ids = 1;
+}
+
+message GetProductsResponse {
+  repeated ProductResponse products = 1;
+  common.Error error = 2;
+}
+
+message CheckStockRequest {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message CheckStockResponse {
+  bool available = 1;
+  int32 current_stock = 2;
+  common.Error error = 3;
+}
+
+message StockItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message ReserveStockRequest {
+  repeated StockItem items = 1;
+}
+
+message ReserveStockResponse {
+  bool success = 1;
+  common.Error error = 2;
+}
+
+message ReleaseStockRequest {
+  repeated StockItem items = 1;
+}
+
+message ReleaseStockResponse {
+  bool success = 1;
+  common.Error error = 2;
+}
+
+message ValidateOwnershipRequest {
+  string product_id = 1;
+  string seller_id = 2;
+}
+
+message ValidateOwnershipResponse {
+  bool is_owner = 1;
+}

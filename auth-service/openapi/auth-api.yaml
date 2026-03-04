@@ -1,0 +1,557 @@
+openapi: 3.0.3
+info:
+  title: Auth Service API
+  description: |
+    Authentication and authorization service for the Marketplace system.
+    
+    Provides user registration, login, JWT token management, and role-based access control.
+  version: 1.0.0
+  contact:
+    name: Marketplace Team
+    email: support@marketplace.com
+
+servers:
+  - url: http://localhost/auth
+    description: Local development (via Nginx)
+  - url: http://localhost:5001/auth
+    description: Direct service access
+
+tags:
+  - name: Authentication
+    description: User authentication operations
+  - name: Users
+    description: User management operations
+
+paths:
+  /register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Creates a new user account with the specified role.
+        Returns user information and JWT tokens (access + refresh).
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              user:
+                summary: Register as USER
+                value:
+                  username: john_doe
+                  email: john@example.com
+                  password: securePassword123
+                  role: USER
+              seller:
+                summary: Register as SELLER
+                value:
+                  username: jane_seller
+                  email: jane@example.com
+                  password: securePassword123
+                  role: SELLER
+              admin:
+                summary: Register as ADMIN
+                value:
+                  username: admin_user
+                  email: admin@example.com
+                  password: securePassword123
+                  role: ADMIN
+      responses:
+        '201':
+          description: User successfully registered
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                user:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  username: john_doe
+                  email: john@example.com
+                  role: USER
+                  is_active: true
+                  created_at: "2026-03-04T17:00:00.000000"
+                  updated_at: "2026-03-04T17:00:00.000000"
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: Bearer
+                expires_in: 900
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/UserAlreadyExists'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: |
+        Authenticates user with email and password.
+        Returns user information and JWT tokens (access + refresh).
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: john@example.com
+              password: securePassword123
+      responses:
+        '200':
+          description: Successfully authenticated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Generates a new access token using a valid refresh token.
+        The refresh token remains valid and can be reused.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      responses:
+        '200':
+          description: New access token generated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: Bearer
+                expires_in: 900
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/RefreshTokenInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me:
+    get:
+      tags:
+        - Users
+      summary: Get current user
+      description: |
+        Returns information about the currently authenticated user.
+        Requires valid access token in Authorization header.
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user information
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                username: john_doe
+                email: john@example.com
+                role: USER
+                is_active: true
+                created_at: "2026-03-04T17:00:00.000000"
+                updated_at: "2026-03-04T17:00:00.000000"
+        '401':
+          $ref: '#/components/responses/TokenInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      tags:
+        - Authentication
+      summary: Health check
+      description: Returns service health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: auth-service
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token obtained from /login or /register endpoints.
+        Format: Bearer <token>
+
+  headers:
+    X-Request-Id:
+      description: Unique request identifier for tracing
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440000
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: Unique username
+          example: john_doe
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User email address
+          example: john@example.com
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+          format: password
+          description: User password (will be hashed)
+          example: securePassword123
+        role:
+          type: string
+          enum: [USER, SELLER, ADMIN]
+          default: USER
+          description: User role
+          example: USER
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: john@example.com
+        password:
+          type: string
+          format: password
+          description: User password
+          example: securePassword123
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Valid refresh token
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    AuthResponse:
+      type: object
+      required:
+        - user
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+      properties:
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        access_token:
+          type: string
+          description: JWT access token (valid for 15 minutes)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: JWT refresh token (valid for 7 days)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        token_type:
+          type: string
+          enum: [Bearer]
+          description: Token type
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Access token expiration time in seconds
+          example: 900
+
+    RefreshResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: New JWT access token
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        token_type:
+          type: string
+          enum: [Bearer]
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+          example: 900
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - role
+        - is_active
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        username:
+          type: string
+          description: Username
+          example: john_doe
+        email:
+          type: string
+          format: email
+          description: User email
+          example: john@example.com
+        role:
+          type: string
+          enum: [USER, SELLER, ADMIN]
+          description: User role
+          example: USER
+        is_active:
+          type: boolean
+          description: Whether user account is active
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2026-03-04T17:00:00.000000"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2026-03-04T17:00:00.000000"
+
+    Error:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+          description: Machine-readable error code
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Human-readable error message
+          example: Validation failed
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+          example:
+            email: ["Not a valid email address."]
+
+  responses:
+    ValidationError:
+      description: Validation error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidEmail:
+              summary: Invalid email format
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  email: ["Not a valid email address."]
+            passwordTooShort:
+              summary: Password too short
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  password: ["Length must be between 6 and 100."]
+            invalidRole:
+              summary: Invalid role
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  role: ["Must be one of: USER, SELLER, ADMIN."]
+
+    UserAlreadyExists:
+      description: User with this email or username already exists
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            emailExists:
+              summary: Email already exists
+              value:
+                error_code: USER_ALREADY_EXISTS
+                message: Email already exists
+                details: {}
+            usernameExists:
+              summary: Username already exists
+              value:
+                error_code: USER_ALREADY_EXISTS
+                message: Username already exists
+                details: {}
+
+    InvalidCredentials:
+      description: Invalid email or password
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: INVALID_CREDENTIALS
+            message: Invalid email or password
+            details: {}
+
+    AccessDenied:
+      description: Access denied (user account inactive)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ACCESS_DENIED
+            message: User account is inactive
+            details: {}
+
+    TokenInvalid:
+      description: Invalid or expired access token
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            tokenInvalid:
+              summary: Invalid token
+              value:
+                error_code: TOKEN_INVALID
+                message: Invalid token
+                details: {}
+            tokenExpired:
+              summary: Token expired
+              value:
+                error_code: TOKEN_EXPIRED
+                message: Token has expired
+                details: {}
+            missingHeader:
+              summary: Missing authorization header
+              value:
+                error_code: TOKEN_INVALID
+                message: Authorization header missing
+                details: {}
+
+    RefreshTokenInvalid:
+      description: Invalid or expired refresh token
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: REFRESH_TOKEN_INVALID
+            message: Invalid or expired refresh token
+            details: {}
+
+    InternalError:
+      description: Internal server error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: INTERNAL_ERROR
+            message: Internal server error
+            details: {}

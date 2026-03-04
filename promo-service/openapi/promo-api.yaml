@@ -1,0 +1,652 @@
+openapi: 3.0.3
+info:
+  title: Promo Service API
+  description: |
+    Promotional code management service for the Marketplace system.
+    
+    Provides CRUD operations for promo codes, discount calculation, and usage tracking.
+  version: 1.0.0
+  contact:
+    name: Marketplace Team
+    email: support@marketplace.com
+
+servers:
+  - url: http://localhost/promo-codes
+    description: Local development (via Nginx)
+  - url: http://localhost:5004/promo-codes
+    description: Direct service access
+
+tags:
+  - name: Promo Codes
+    description: Promo code management operations
+
+paths:
+  /:
+    get:
+      tags:
+        - Promo Codes
+      summary: List promo codes
+      description: |
+        Returns a paginated list of promo codes.
+        SELLER and ADMIN can see all codes.
+        USER can only see active codes.
+      operationId: listPromoCodes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number (0-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Page size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: active
+          in: query
+          description: Filter by active status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of promo codes
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Promo Codes
+      summary: Create promo code
+      description: |
+        Creates a new promo code.
+        Only SELLER and ADMIN roles can create promo codes.
+      operationId: createPromoCode
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoCodeCreateRequest'
+            examples:
+              percentage:
+                summary: Percentage discount
+                value:
+                  code: WELCOME10
+                  discount_type: PERCENTAGE
+                  discount_value: 10
+                  min_order_amount: 50
+                  max_uses: 100
+                  valid_from: "2026-03-01T00:00:00Z"
+                  valid_until: "2026-12-31T23:59:59Z"
+              fixedAmount:
+                summary: Fixed amount discount
+                value:
+                  code: SAVE20
+                  discount_type: FIXED_AMOUNT
+                  discount_value: 20
+                  min_order_amount: 100
+                  max_uses: 50
+                  valid_from: "2026-03-01T00:00:00Z"
+                  valid_until: "2026-06-30T23:59:59Z"
+      responses:
+        '201':
+          description: Promo code created successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '409':
+          $ref: '#/components/responses/PromoCodeExists'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /{code}:
+    get:
+      tags:
+        - Promo Codes
+      summary: Get promo code by code
+      description: Returns detailed information about a specific promo code
+      operationId: getPromoCode
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Promo code
+          schema:
+            type: string
+            pattern: '^[A-Z0-9_]{4,20}$'
+            example: WELCOME10
+      responses:
+        '200':
+          description: Promo code details
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/PromoCodeNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /{id}:
+    put:
+      tags:
+        - Promo Codes
+      summary: Update promo code
+      description: |
+        Updates an existing promo code.
+        Only SELLER and ADMIN can update promo codes.
+      operationId: updatePromoCode
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Promo code ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoCodeUpdateRequest'
+      responses:
+        '200':
+          description: Promo code updated successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/PromoCodeNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Promo Codes
+      summary: Delete promo code
+      description: |
+        Deletes a promo code (sets active to false).
+        Only SELLER and ADMIN can delete promo codes.
+      operationId: deletePromoCode
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Promo code ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Promo code deleted successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/PromoCodeNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /validate/{code}:
+    post:
+      tags:
+        - Promo Codes
+      summary: Validate promo code
+      description: |
+        Validates a promo code for a given order amount.
+        Checks expiry, usage limits, and minimum order amount.
+      operationId: validatePromoCode
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Promo code to validate
+          schema:
+            type: string
+            pattern: '^[A-Z0-9_]{4,20}$'
+            example: WELCOME10
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - order_amount
+              properties:
+                order_amount:
+                  type: number
+                  format: decimal
+                  minimum: 0
+                  description: Order amount to validate against
+                  example: 100.00
+      responses:
+        '200':
+          description: Promo code is valid
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  discount_amount:
+                    type: number
+                    format: decimal
+                    description: Calculated discount amount
+                    example: 10.00
+                  final_amount:
+                    type: number
+                    format: decimal
+                    description: Final amount after discount
+                    example: 90.00
+        '422':
+          $ref: '#/components/responses/PromoCodeInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      tags:
+        - Promo Codes
+      summary: Health check
+      description: Returns service health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: promo-service
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from Auth Service
+
+  headers:
+    X-Request-Id:
+      description: Unique request identifier for tracing
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    PromoCodeCreateRequest:
+      type: object
+      required:
+        - code
+        - discount_type
+        - discount_value
+        - min_order_amount
+        - max_uses
+        - valid_from
+        - valid_until
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z0-9_]{4,20}$'
+          description: Unique promo code (uppercase letters, numbers, underscores)
+          example: WELCOME10
+        discount_type:
+          type: string
+          enum: [PERCENTAGE, FIXED_AMOUNT]
+          description: Type of discount
+          example: PERCENTAGE
+        discount_value:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: |
+            Discount value:
+            - For PERCENTAGE: value between 0 and 100
+            - For FIXED_AMOUNT: positive amount
+          example: 10
+        min_order_amount:
+          type: number
+          format: decimal
+          minimum: 0
+          description: Minimum order amount to apply promo code
+          example: 50.00
+        max_uses:
+          type: integer
+          minimum: 1
+          description: Maximum number of times code can be used
+          example: 100
+        valid_from:
+          type: string
+          format: date-time
+          description: Start date of validity period
+          example: "2026-03-01T00:00:00Z"
+        valid_until:
+          type: string
+          format: date-time
+          description: End date of validity period
+          example: "2026-12-31T23:59:59Z"
+
+    PromoCodeUpdateRequest:
+      type: object
+      properties:
+        discount_value:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Updated discount value
+        min_order_amount:
+          type: number
+          format: decimal
+          minimum: 0
+          description: Updated minimum order amount
+        max_uses:
+          type: integer
+          minimum: 1
+          description: Updated maximum uses
+        valid_from:
+          type: string
+          format: date-time
+          description: Updated start date
+        valid_until:
+          type: string
+          format: date-time
+          description: Updated end date
+        active:
+          type: boolean
+          description: Whether promo code is active
+          example: true
+
+    PromoCodeResponse:
+      type: object
+      required:
+        - id
+        - code
+        - discount_type
+        - discount_value
+        - min_order_amount
+        - max_uses
+        - current_uses
+        - valid_from
+        - valid_until
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Promo code unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        code:
+          type: string
+          description: Promo code
+          example: WELCOME10
+        discount_type:
+          type: string
+          enum: [PERCENTAGE, FIXED_AMOUNT]
+          description: Type of discount
+          example: PERCENTAGE
+        discount_value:
+          type: number
+          format: decimal
+          description: Discount value
+          example: 10
+        min_order_amount:
+          type: number
+          format: decimal
+          description: Minimum order amount
+          example: 50.00
+        max_uses:
+          type: integer
+          description: Maximum number of uses
+          example: 100
+        current_uses:
+          type: integer
+          description: Current number of uses
+          example: 25
+        valid_from:
+          type: string
+          format: date-time
+          description: Validity start date
+          example: "2026-03-01T00:00:00Z"
+        valid_until:
+          type: string
+          format: date-time
+          description: Validity end date
+          example: "2026-12-31T23:59:59Z"
+        active:
+          type: boolean
+          description: Whether promo code is active
+          example: true
+
+    PromoCodeListResponse:
+      type: object
+      required:
+        - promo_codes
+        - page
+        - size
+        - total_elements
+      properties:
+        promo_codes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromoCodeResponse'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        total_elements:
+          type: integer
+          format: int64
+          example: 50
+
+    Error:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    ValidationError:
+      description: Validation error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidCode:
+              summary: Invalid code format
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  code: ["Must match pattern ^[A-Z0-9_]{4,20}$"]
+            invalidPercentage:
+              summary: Invalid percentage value
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  discount_value: ["Percentage must be between 0 and 100"]
+
+    PromoCodeNotFound:
+      description: Promo code not found
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: PROMO_CODE_NOT_FOUND
+            message: Promo code not found
+            details: {}
+
+    PromoCodeExists:
+      description: Promo code already exists
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: PROMO_CODE_EXISTS
+            message: Promo code already exists
+            details: {}
+
+    PromoCodeInvalid:
+      description: Promo code is invalid
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            expired:
+              summary: Promo code expired
+              value:
+                error_code: PROMO_CODE_INVALID
+                message: Promo code has expired
+                details: {}
+            exhausted:
+              summary: Usage limit reached
+              value:
+                error_code: PROMO_CODE_INVALID
+                message: Promo code usage limit reached
+                details: {}
+            minAmount:
+              summary: Order amount too low
+              value:
+                error_code: PROMO_CODE_MIN_AMOUNT
+                message: Order amount below minimum required
+                details:
+                  min_amount: 50.00
+                  order_amount: 30.00
+
+    Unauthorized:
+      description: Authentication required
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: TOKEN_INVALID
+            message: Invalid or expired token
+            details: {}
+
+    AccessDenied:
+      description: Insufficient permissions
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ACCESS_DENIED
+            message: Insufficient permissions
+            details: {}
+
+    InternalError:
+      description: Internal server error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: INTERNAL_ERROR
+            message: Internal server error
+            details: {}
