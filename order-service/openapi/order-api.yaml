@@ -1,0 +1,762 @@
+openapi: 3.0.3
+info:
+  title: Order Service API
+  description: |
+    Order management service for the Marketplace system.
+    
+    Provides order creation with complex business logic, state machine management,
+    stock reservation, promo code application, and rate limiting.
+  version: 1.0.0
+  contact:
+    name: Marketplace Team
+    email: support@marketplace.com
+
+servers:
+  - url: http://localhost/orders
+    description: Local development (via Nginx)
+  - url: http://localhost:5003/orders
+    description: Direct service access
+
+tags:
+  - name: Orders
+    description: Order management operations
+
+paths:
+  /:
+    get:
+      tags:
+        - Orders
+      summary: List user's orders
+      description: |
+        Returns a paginated list of orders for the current user.
+        ADMIN can see all orders.
+        USER can only see their own orders.
+      operationId: listOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number (0-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Page size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by order status
+          required: false
+          schema:
+            type: string
+            enum: [CREATED, PAYMENT_PENDING, PAID, SHIPPED, COMPLETED, CANCELED]
+      responses:
+        '200':
+          description: List of orders
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Orders
+      summary: Create order
+      description: |
+        Creates a new order with complex validation:
+        1. Rate limit check (max 1 order per N minutes)
+        2. Active order check (no concurrent active orders)
+        3. Product validation (exists, active status)
+        4. Stock availability check
+        5. Stock reservation (transactional)
+        6. Price snapshot (immune to price changes)
+        7. Promo code validation (expiry, usage, min amount)
+        8. Discount calculation
+        9. Order creation (atomic transaction)
+        10. User operation recording
+        
+        Only USER and ADMIN roles can create orders.
+      operationId: createOrder
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+            examples:
+              withPromo:
+                summary: Order with promo code
+                value:
+                  items:
+                    - product_id: 550e8400-e29b-41d4-a716-446655440000
+                      quantity: 2
+                    - product_id: 660e8400-e29b-41d4-a716-446655440001
+                      quantity: 1
+                  promo_code: WELCOME10
+              withoutPromo:
+                summary: Order without promo code
+                value:
+                  items:
+                    - product_id: 550e8400-e29b-41d4-a716-446655440000
+                      quantity: 1
+      responses:
+        '201':
+          description: Order created successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '409':
+          $ref: '#/components/responses/OrderConflict'
+        '422':
+          $ref: '#/components/responses/PromoCodeError'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /{id}:
+    get:
+      tags:
+        - Orders
+      summary: Get order by ID
+      description: |
+        Returns detailed information about a specific order.
+        USER can only access their own orders.
+        ADMIN can access any order.
+      operationId: getOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Order ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order details
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OrderOwnershipViolation'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags:
+        - Orders
+      summary: Update order
+      description: |
+        Updates an existing order (only in CREATED state).
+        
+        Process:
+        1. Check ownership
+        2. Check state (must be CREATED)
+        3. Rate limit check
+        4. Return previous stock
+        5. Validate and reserve new stock
+        6. Recalculate total with promo code
+        7. Update order (transactional)
+        8. Record user operation
+      operationId: updateOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Order ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderUpdateRequest'
+      responses:
+        '200':
+          description: Order updated successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OrderOwnershipViolation'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '409':
+          $ref: '#/components/responses/InvalidStateTransition'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /{id}/cancel:
+    post:
+      tags:
+        - Orders
+      summary: Cancel order
+      description: |
+        Cancels an order (only from CREATED or PAYMENT_PENDING states).
+        
+        Process:
+        1. Check ownership
+        2. Check state (CREATED or PAYMENT_PENDING)
+        3. Return stock
+        4. Release promo code usage
+        5. Set status to CANCELED
+      operationId: cancelOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Order ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order canceled successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OrderOwnershipViolation'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '409':
+          $ref: '#/components/responses/InvalidStateTransition'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /{id}/transition:
+    post:
+      tags:
+        - Orders
+      summary: Transition order state
+      description: |
+        Changes order state according to state machine rules.
+        Only ADMIN can perform state transitions.
+        
+        Valid transitions:
+        - CREATED → PAYMENT_PENDING
+        - CREATED → CANCELED
+        - PAYMENT_PENDING → PAID
+        - PAYMENT_PENDING → CANCELED
+        - PAID → SHIPPED
+        - SHIPPED → COMPLETED
+      operationId: transitionOrderState
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Order ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - new_status
+              properties:
+                new_status:
+                  type: string
+                  enum: [PAYMENT_PENDING, PAID, SHIPPED, COMPLETED, CANCELED]
+                  description: Target status
+      responses:
+        '200':
+          description: State transition successful
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '409':
+          $ref: '#/components/responses/InvalidStateTransition'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      tags:
+        - Orders
+      summary: Health check
+      description: Returns service health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: order-service
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from Auth Service
+
+  headers:
+    X-Request-Id:
+      description: Unique request identifier for tracing
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    OrderCreateRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          description: Order items
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+        promo_code:
+          type: string
+          pattern: '^[A-Z0-9_]{4,20}$'
+          nullable: true
+          description: Optional promo code
+          example: WELCOME10
+
+    OrderUpdateRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          description: Updated order items
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+
+    OrderItemRequest:
+      type: object
+      required:
+        - product_id
+        - quantity
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          description: Product ID
+          example: 550e8400-e29b-41d4-a716-446655440000
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 999
+          description: Quantity
+          example: 2
+
+    OrderResponse:
+      type: object
+      required:
+        - id
+        - user_id
+        - status
+        - total_amount
+        - discount_amount
+        - items
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Order ID
+          example: 550e8400-e29b-41d4-a716-446655440000
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+          example: 660e8400-e29b-41d4-a716-446655440001
+        status:
+          type: string
+          enum: [CREATED, PAYMENT_PENDING, PAID, SHIPPED, COMPLETED, CANCELED]
+          description: Order status
+          example: CREATED
+        promo_code_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Applied promo code ID
+          example: 770e8400-e29b-41d4-a716-446655440002
+        total_amount:
+          type: number
+          format: decimal
+          description: Total amount (after discount)
+          example: 90.00
+        discount_amount:
+          type: number
+          format: decimal
+          description: Discount amount
+          example: 10.00
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-03-04T17:00:00.000000"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-04T17:00:00.000000"
+
+    OrderItemResponse:
+      type: object
+      required:
+        - id
+        - product_id
+        - quantity
+        - price_at_order
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Order item ID
+        product_id:
+          type: string
+          format: uuid
+          description: Product ID
+        quantity:
+          type: integer
+          description: Quantity
+          example: 2
+        price_at_order:
+          type: number
+          format: decimal
+          description: Price at time of order (snapshot)
+          example: 50.00
+
+    OrderListResponse:
+      type: object
+      required:
+        - orders
+        - page
+        - size
+        - total_elements
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderResponse'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        total_elements:
+          type: integer
+          format: int64
+          example: 100
+
+    Error:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    ValidationError:
+      description: Validation error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            emptyItems:
+              summary: No items in order
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  items: ["Must have at least 1 item"]
+            invalidQuantity:
+              summary: Invalid quantity
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  quantity: ["Must be between 1 and 999"]
+
+    OrderNotFound:
+      description: Order not found
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ORDER_NOT_FOUND
+            message: Order not found
+            details: {}
+
+    ProductNotFound:
+      description: Product not found or inactive
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              summary: Product not found
+              value:
+                error_code: PRODUCT_NOT_FOUND
+                message: Product not found
+                details:
+                  product_id: 550e8400-e29b-41d4-a716-446655440000
+            inactive:
+              summary: Product inactive
+              value:
+                error_code: PRODUCT_INACTIVE
+                message: Product is not active
+                details:
+                  product_id: 550e8400-e29b-41d4-a716-446655440000
+
+    OrderConflict:
+      description: Order conflict (active order exists or insufficient stock)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            activeOrder:
+              summary: Active order exists
+              value:
+                error_code: ORDER_HAS_ACTIVE
+                message: User already has an active order
+                details: {}
+            insufficientStock:
+              summary: Insufficient stock
+              value:
+                error_code: INSUFFICIENT_STOCK
+                message: Insufficient stock for one or more products
+                details:
+                  products:
+                    - product_id: 550e8400-e29b-41d4-a716-446655440000
+                      requested: 10
+                      available: 5
+
+    InvalidStateTransition:
+      description: Invalid state transition
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: INVALID_STATE_TRANSITION
+            message: Cannot transition from PAID to CREATED
+            details:
+              current_status: PAID
+              requested_status: CREATED
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ORDER_LIMIT_EXCEEDED
+            message: Too many order operations. Please try again later.
+            details:
+              retry_after_seconds: 300
+
+    PromoCodeError:
+      description: Promo code error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalid:
+              summary: Invalid promo code
+              value:
+                error_code: PROMO_CODE_INVALID
+                message: Promo code is invalid, expired, or exhausted
+                details: {}
+            minAmount:
+              summary: Order below minimum
+              value:
+                error_code: PROMO_CODE_MIN_AMOUNT
+                message: Order amount below minimum for promo code
+                details:
+                  min_amount: 50.00
+                  order_amount: 30.00
+
+    OrderOwnershipViolation:
+      description: Order belongs to another user
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ORDER_OWNERSHIP_VIOLATION
+            message: Order belongs to another user
+            details: {}
+
+    Unauthorized:
+      description: Authentication required
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: TOKEN_INVALID
+            message: Invalid or expired token
+            details: {}
+
+    AccessDenied:
+      description: Insufficient permissions
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ACCESS_DENIED
+            message: Insufficient permissions
+            details: {}
+
+    InternalError:
+      description: Internal server error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: INTERNAL_ERROR
+            message: Internal server error
+            details: {}

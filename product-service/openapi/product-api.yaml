@@ -1,0 +1,549 @@
+openapi: 3.0.3
+info:
+  title: Product Service API
+  description: |
+    Product management service for the Marketplace system.
+    
+    Provides CRUD operations for products, stock management, and seller ownership validation.
+  version: 1.0.0
+  contact:
+    name: Marketplace Team
+    email: support@marketplace.com
+
+servers:
+  - url: http://localhost/products
+    description: Local development (via Nginx)
+  - url: http://localhost:5002/products
+    description: Direct service access
+
+tags:
+  - name: Products
+    description: Product management operations
+
+paths:
+  /:
+    get:
+      tags:
+        - Products
+      summary: List products
+      description: |
+        Returns a paginated list of products with optional filtering.
+        Supports filtering by status and category.
+      operationId: listProducts
+      parameters:
+        - name: page
+          in: query
+          description: Page number (0-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: size
+          in: query
+          description: Page size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+            example: 20
+        - name: status
+          in: query
+          description: Filter by product status
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE, ARCHIVED]
+            example: ACTIVE
+        - name: category
+          in: query
+          description: Filter by category (exact match)
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+            example: Electronics
+      responses:
+        '200':
+          description: List of products
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Products
+      summary: Create product
+      description: |
+        Creates a new product. 
+        Only SELLER and ADMIN roles can create products.
+        SELLER can only create products for themselves.
+      operationId: createProduct
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+            example:
+              name: Laptop Dell XPS 15
+              description: High-performance laptop with 16GB RAM and 512GB SSD
+              price: 1299.99
+              stock: 10
+              category: Electronics
+      responses:
+        '201':
+          description: Product created successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /{id}:
+    get:
+      tags:
+        - Products
+      summary: Get product by ID
+      description: Returns detailed information about a specific product
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+            example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '200':
+          description: Product details
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags:
+        - Products
+      summary: Update product
+      description: |
+        Updates an existing product.
+        SELLER can only update their own products.
+        ADMIN can update any product.
+      operationId: updateProduct
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+            example: 550e8400-e29b-41d4-a716-446655440000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+            example:
+              name: Laptop Dell XPS 15 (Updated)
+              description: High-performance laptop with 32GB RAM and 1TB SSD
+              price: 1499.99
+              stock: 15
+              category: Electronics
+              status: ACTIVE
+      responses:
+        '200':
+          description: Product updated successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Products
+      summary: Delete product (soft delete)
+      description: |
+        Performs soft delete by changing product status to ARCHIVED.
+        SELLER can only delete their own products.
+        ADMIN can delete any product.
+      operationId: deleteProduct
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+            example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '204':
+          description: Product deleted successfully (archived)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      tags:
+        - Products
+      summary: Health check
+      description: Returns service health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: product-service
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from Auth Service
+
+  headers:
+    X-Request-Id:
+      description: Unique request identifier for tracing
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ProductCreateRequest:
+      type: object
+      required:
+        - name
+        - price
+        - stock
+        - category
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Product name
+          example: Laptop Dell XPS 15
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+          description: Product description
+          example: High-performance laptop with 16GB RAM
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          exclusiveMinimum: true
+          description: Product price (must be > 0)
+          example: 1299.99
+        stock:
+          type: integer
+          minimum: 0
+          description: Stock quantity
+          example: 10
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Product category
+          example: Electronics
+
+    ProductUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Product name
+          example: Laptop Dell XPS 15
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+          description: Product description
+          example: High-performance laptop
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          exclusiveMinimum: true
+          description: Product price
+          example: 1299.99
+        stock:
+          type: integer
+          minimum: 0
+          description: Stock quantity
+          example: 10
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Product category
+          example: Electronics
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, ARCHIVED]
+          description: Product status
+          example: ACTIVE
+
+    ProductResponse:
+      type: object
+      required:
+        - id
+        - name
+        - price
+        - stock
+        - category
+        - status
+        - seller_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Product unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        name:
+          type: string
+          description: Product name
+          example: Laptop Dell XPS 15
+        description:
+          type: string
+          nullable: true
+          description: Product description
+          example: High-performance laptop with 16GB RAM
+        price:
+          type: number
+          format: decimal
+          description: Product price
+          example: 1299.99
+        stock:
+          type: integer
+          description: Available stock quantity
+          example: 10
+        category:
+          type: string
+          description: Product category
+          example: Electronics
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, ARCHIVED]
+          description: Product status
+          example: ACTIVE
+        seller_id:
+          type: string
+          format: uuid
+          description: Seller (owner) ID
+          example: 660e8400-e29b-41d4-a716-446655440001
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2026-03-04T17:00:00.000000"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2026-03-04T17:00:00.000000"
+
+    ProductListResponse:
+      type: object
+      required:
+        - products
+        - page
+        - size
+        - total_elements
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+          description: List of products
+        page:
+          type: integer
+          description: Current page number (0-indexed)
+          example: 0
+        size:
+          type: integer
+          description: Page size
+          example: 20
+        total_elements:
+          type: integer
+          format: int64
+          description: Total number of products matching filters
+          example: 100
+
+    Error:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+          description: Machine-readable error code
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Human-readable error message
+          example: Validation failed
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+
+  responses:
+    ValidationError:
+      description: Validation error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidPrice:
+              summary: Price must be positive
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  price: ["Must be greater than 0"]
+            nameTooLong:
+              summary: Name too long
+              value:
+                error_code: VALIDATION_ERROR
+                message: Validation failed
+                details:
+                  name: ["Length must be between 1 and 255"]
+
+    ProductNotFound:
+      description: Product not found
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: PRODUCT_NOT_FOUND
+            message: Product not found
+            details: {}
+
+    Unauthorized:
+      description: Authentication required
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: TOKEN_INVALID
+            message: Invalid or expired token
+            details: {}
+
+    AccessDenied:
+      description: Insufficient permissions
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: ACCESS_DENIED
+            message: Insufficient permissions
+            details: {}
+
+    InternalError:
+      description: Internal server error
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: INTERNAL_ERROR
+            message: Internal server error
+            details: {}

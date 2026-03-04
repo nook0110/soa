@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package common;
+
+message Empty {}
+
+message Error {
+  string error_code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+message Pagination {
+  int32 page = 1;
+  int32 size = 2;
+  int64 total_elements = 3;
+}

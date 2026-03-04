@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package promo;
+
+import "common.proto";
+
+service PromoService {
+  rpc ValidatePromoCode(ValidatePromoCodeRequest) returns (ValidatePromoCodeResponse);
+  rpc ApplyPromoCode(ApplyPromoCodeRequest) returns (ApplyPromoCodeResponse);
+  rpc ReleasePromoCode(ReleasePromoCodeRequest) returns (ReleasePromoCodeResponse);
+  rpc CalculateDiscount(CalculateDiscountRequest) returns (CalculateDiscountResponse);
+}
+
+message ValidatePromoCodeRequest {
+  string code = 1;
+  double order_amount = 2;
+}
+
+message ValidatePromoCodeResponse {
+  bool valid = 1;
+  PromoCodeInfo promo_code = 2;
+  common.Error error = 3;
+}
+
+message PromoCodeInfo {
+  string id = 1;
+  string code = 2;
+  string discount_type = 3;
+  double discount_value = 4;
+  double min_order_amount = 5;
+  int32 max_uses = 6;
+  int32 current_uses = 7;
+}
+
+message ApplyPromoCodeRequest {
+  string code = 1;
+}
+
+message ApplyPromoCodeResponse {
+  bool success = 1;
+  string promo_code_id = 2;
+  common.Error error = 3;
+}
+
+message ReleasePromoCodeRequest {
+  string code = 1;
+}
+
+message ReleasePromoCodeResponse {
+  bool success = 1;
+  common.Error error = 2;
+}
+
+message CalculateDiscountRequest {
+  PromoCodeInfo promo_code = 1;
+  double order_amount = 2;
+}
+
+message CalculateDiscountResponse {
+  double discount_amount = 1;
+  double final_amount = 2;
+}
