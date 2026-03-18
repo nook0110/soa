@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package flight;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "flight-service/proto/flight";
+
+service FlightService {
+  rpc SearchFlights(SearchFlightsRequest) returns (SearchFlightsResponse);
+  rpc GetFlight(GetFlightRequest) returns (GetFlightResponse);
+  rpc ReserveSeats(ReserveSeatRequest) returns (ReserveSeatResponse);
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+}
+
+enum FlightStatus {
+  FLIGHT_STATUS_UNSPECIFIED = 0;
+  FLIGHT_STATUS_SCHEDULED = 1;
+  FLIGHT_STATUS_DEPARTED = 2;
+  FLIGHT_STATUS_CANCELLED = 3;
+  FLIGHT_STATUS_COMPLETED = 4;
+}
+
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+  RESERVATION_STATUS_ACTIVE = 1;
+  RESERVATION_STATUS_RELEASED = 2;
+  RESERVATION_STATUS_EXPIRED = 3;
+}
+
+message Flight {
+  int64 id = 1;
+  string flight_number = 2;
+  string airline = 3;
+  string origin_airport = 4;
+  string destination_airport = 5;
+  google.protobuf.Timestamp departure_time = 6;
+  google.protobuf.Timestamp arrival_time = 7;
+  int32 total_seats = 8;
+  int32 available_seats = 9;
+  double price = 10;
+  FlightStatus status = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message SearchFlightsRequest {
+  string origin_airport = 1;
+  string destination_airport = 2;
+  google.protobuf.Timestamp date = 3;
+}
+
+message SearchFlightsResponse {
+  repeated Flight flights = 1;
+}
+
+message GetFlightRequest {
+  int64 flight_id = 1;
+}
+
+message GetFlightResponse {
+  Flight flight = 1;
+}
+
+message ReserveSeatRequest {
+  int64 flight_id = 1;
+  int32 seat_count = 2;
+  string booking_id = 3;
+}
+
+message ReserveSeatResponse {
+  int64 reservation_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message ReleaseReservationRequest {
+  string booking_id = 1;
+}
+
+message ReleaseReservationResponse {
+  bool success = 1;
+  string message = 2;
+}
