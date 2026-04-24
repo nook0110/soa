@@ -15,7 +15,8 @@
       "targets": [
         {
           "rawSql": "SELECT metric_date AS time, dau AS value FROM cinema.agg_dau ORDER BY metric_date",
-          "format": "time_series",
+          "format": 0,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
@@ -35,7 +36,8 @@
       "targets": [
         {
           "rawSql": "SELECT metric_date AS time, conversion_pct AS value FROM cinema.agg_conversion ORDER BY metric_date",
-          "format": "time_series",
+          "format": 0,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
@@ -56,7 +58,8 @@
       "targets": [
         {
           "rawSql": "SELECT metric_date AS time, avg_progress_seconds AS value FROM cinema.agg_avg_watch_time ORDER BY metric_date",
-          "format": "time_series",
+          "format": 0,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
@@ -73,7 +76,8 @@
       "targets": [
         {
           "rawSql": "SELECT movie_id, sum(view_count) AS total_views FROM cinema.agg_top_movies WHERE metric_date >= today() - 7 GROUP BY movie_id ORDER BY total_views DESC LIMIT 10",
-          "format": "table",
+          "format": 1,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
@@ -92,7 +96,8 @@
       "targets": [
         {
           "rawSql": "SELECT cohort_date, day_number, round(retention_pct, 1) AS retention_pct FROM cinema.agg_retention ORDER BY cohort_date DESC, day_number ASC",
-          "format": "table",
+          "format": 1,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
@@ -133,7 +138,8 @@
       "targets": [
         {
           "rawSql": "SELECT device_type, count() AS events FROM cinema.movie_events WHERE event_timestamp >= now() - INTERVAL 1 DAY GROUP BY device_type ORDER BY events DESC",
-          "format": "table",
+          "format": 1,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
@@ -151,7 +157,8 @@
       "targets": [
         {
           "rawSql": "SELECT event_type, count() AS events FROM cinema.movie_events WHERE event_timestamp >= now() - INTERVAL 1 DAY GROUP BY event_type ORDER BY events DESC",
-          "format": "table",
+          "format": 1,
+          "queryType": "sql",
           "refId": "A"
         }
       ],
