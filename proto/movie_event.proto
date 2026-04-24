@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package cinema.events.v1;
+
+option java_package = "cinema.events.v1";
+option go_package = "cinema/events/v1";
+
+import "google/protobuf/timestamp.proto";
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  VIEW_STARTED = 1;
+  VIEW_FINISHED = 2;
+  VIEW_PAUSED = 3;
+  VIEW_RESUMED = 4;
+  LIKED = 5;
+  SEARCHED = 6;
+}
+
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  MOBILE = 1;
+  DESKTOP = 2;
+  TV = 3;
+  TABLET = 4;
+}
+
+message MovieEvent {
+  string event_id = 1;          // UUID
+  string user_id = 2;           // User identifier
+  string movie_id = 3;          // Movie identifier
+  EventType event_type = 4;     // Type of event
+  google.protobuf.Timestamp timestamp = 5;  // Event time (UTC)
+  DeviceType device_type = 6;   // Device type
+  string session_id = 7;        // Session identifier
+  int32 progress_seconds = 8;   // View progress in seconds
+}
