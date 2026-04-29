@@ -1,0 +1,171 @@
+{
+  "title": "Cinema Analytics",
+  "uid": "cinema_analytics",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "DAU (Daily Active Users)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT metric_date AS time, dau AS value FROM cinema.agg_dau ORDER BY metric_date",
+          "format": 0,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "View Conversion Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT metric_date AS time, conversion_pct AS value FROM cinema.agg_conversion ORDER BY metric_date",
+          "format": 0,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Average Watch Time (seconds)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT metric_date AS time, avg_progress_seconds AS value FROM cinema.agg_avg_watch_time ORDER BY metric_date",
+          "format": 0,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Top 10 Movies (last 7 days)",
+      "type": "barchart",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT movie_id, sum(view_count) AS total_views FROM cinema.agg_top_movies WHERE metric_date >= today() - 7 GROUP BY movie_id ORDER BY total_views DESC LIMIT 10",
+          "format": 1,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "xField": "movie_id",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Retention Cohort Heatmap",
+      "description": "Percentage of users from each cohort (by first-view date) who returned on day N",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT cohort_date, day_number, round(retention_pct, 1) AS retention_pct FROM cinema.agg_retention ORDER BY cohort_date DESC, day_number ASC",
+          "format": 1,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "displayMode": "color-background"
+          },
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 20 },
+              { "color": "green", "value": 60 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "retention_pct" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 6,
+      "title": "Events by Device Type (last 24h)",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 26, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT device_type, count() AS events FROM cinema.movie_events WHERE event_timestamp >= now() - INTERVAL 1 DAY GROUP BY device_type ORDER BY events DESC",
+          "format": 1,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["percent", "name"]
+      }
+    },
+    {
+      "id": 7,
+      "title": "Event Type Distribution (last 24h)",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 26, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_uid" },
+      "targets": [
+        {
+          "rawSql": "SELECT event_type, count() AS events FROM cinema.movie_events WHERE event_timestamp >= now() - INTERVAL 1 DAY GROUP BY event_type ORDER BY events DESC",
+          "format": 1,
+          "queryType": "sql",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "pieType": "pie",
+        "displayLabels": ["percent", "name"]
+      }
+    }
+  ]
+}
