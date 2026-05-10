@@ -1,0 +1,232 @@
+version: "3.8"
+
+services:
+  # ──────────────────────────────────────────────
+  # Zookeeper
+  # ──────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Kafka
+  # ──────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Schema Registry
+  # ──────────────────────────────────────────────
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Cassandra cluster (3 nodes)
+  # ──────────────────────────────────────────────
+  cassandra-1:
+    image: cassandra:4.1
+    container_name: cassandra-1
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: warehouse-cluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      HEAP_NEWSIZE: 128M
+      MAX_HEAP_SIZE: 512M
+    volumes:
+      - cassandra1-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 15s
+      retries: 15
+      start_period: 60s
+
+  cassandra-2:
+    image: cassandra:4.1
+    container_name: cassandra-2
+    depends_on:
+      cassandra-1:
+        condition: service_healthy
+    environment:
+      CASSANDRA_CLUSTER_NAME: warehouse-cluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      CASSANDRA_SEEDS: cassandra-1
+      HEAP_NEWSIZE: 128M
+      MAX_HEAP_SIZE: 512M
+    volumes:
+      - cassandra2-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 15s
+      retries: 15
+      start_period: 60s
+
+  cassandra-3:
+    image: cassandra:4.1
+    container_name: cassandra-3
+    depends_on:
+      cassandra-2:
+        condition: service_healthy
+    environment:
+      CASSANDRA_CLUSTER_NAME: warehouse-cluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      CASSANDRA_SEEDS: cassandra-1
+      HEAP_NEWSIZE: 128M
+      MAX_HEAP_SIZE: 512M
+    volumes:
+      - cassandra3-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 15s
+      retries: 15
+      start_period: 60s
+
+  # ──────────────────────────────────────────────
+  # Cassandra migrations (runs once)
+  # ──────────────────────────────────────────────
+  cassandra-init:
+    image: cassandra:4.1
+    depends_on:
+      cassandra-1:
+        condition: service_healthy
+      cassandra-2:
+        condition: service_healthy
+      cassandra-3:
+        condition: service_healthy
+    volumes:
+      - ./cassandra:/cassandra
+    command: >
+      bash -c "
+        echo 'Running Cassandra migrations...' &&
+        cqlsh cassandra-1 -f /cassandra/migrations.cql &&
+        echo 'Migrations applied successfully.'
+      "
+    restart: "no"
+
+  # ──────────────────────────────────────────────
+  # WMS Producer
+  # ──────────────────────────────────────────────
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KAFKA_TOPIC: warehouse-events
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Consumer Service
+  # ──────────────────────────────────────────────
+  consumer:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    depends_on:
+      cassandra-init:
+        condition: service_completed_successfully
+      schema-registry:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KAFKA_TOPIC: warehouse-events
+      KAFKA_DLQ_TOPIC: warehouse-events-dlq
+      KAFKA_GROUP_ID: warehouse-state-consumer
+      CASSANDRA_HOSTS: cassandra-1,cassandra-2,cassandra-3
+      CASSANDRA_KEYSPACE: warehouse
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Prometheus
+  # ──────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./grafana/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - consumer
+
+  # ──────────────────────────────────────────────
+  # Grafana
+  # ──────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+volumes:
+  cassandra1-data:
+  cassandra2-data:
+  cassandra3-data:

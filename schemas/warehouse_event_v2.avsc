@@ -1,0 +1,45 @@
+{
+  "type": "record",
+  "name": "WarehouseEvent",
+  "namespace": "com.warehouse",
+  "doc": "V2 - adds supplier_id for PRODUCT_RECEIVED (backward compatible)",
+  "fields": [
+    {"name": "event_id",   "type": "string"},
+    {"name": "event_type", "type": {
+      "type": "enum",
+      "name": "EventType",
+      "symbols": [
+        "PRODUCT_RECEIVED",
+        "PRODUCT_SHIPPED",
+        "PRODUCT_MOVED",
+        "PRODUCT_RESERVED",
+        "PRODUCT_RELEASED",
+        "INVENTORY_COUNTED",
+        "ORDER_CREATED",
+        "ORDER_COMPLETED"
+      ]
+    }},
+    {"name": "timestamp",       "type": "string"},
+    {"name": "sequence_number", "type": "long"},
+    {"name": "product_id",  "type": ["null", "string"], "default": null},
+    {"name": "zone_id",     "type": ["null", "string"], "default": null},
+    {"name": "from_zone_id","type": ["null", "string"], "default": null},
+    {"name": "to_zone_id",  "type": ["null", "string"], "default": null},
+    {"name": "quantity",    "type": ["null", "int"],    "default": null},
+    {"name": "order_id",    "type": ["null", "string"], "default": null},
+    {"name": "order_items", "type": ["null", {
+      "type": "array",
+      "items": {
+        "type": "record",
+        "name": "OrderItem",
+        "fields": [
+          {"name": "product_id", "type": "string"},
+          {"name": "zone_id",    "type": "string"},
+          {"name": "quantity",   "type": "int"}
+        ]
+      }
+    }], "default": null},
+    {"name": "supplier_id", "type": ["null", "string"], "default": null,
+     "doc": "V2: supplier identifier for PRODUCT_RECEIVED events"}
+  ]
+}
