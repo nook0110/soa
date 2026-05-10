@@ -1,0 +1,115 @@
+{
+  "title": "Warehouse Consumer",
+  "uid": "warehouse-consumer",
+  "version": 1,
+  "schemaVersion": 38,
+  "timezone": "browser",
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Consumer Lag per Partition",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "consumer_lag",
+          "legendFormat": "topic={{topic}} partition={{partition}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 2}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Events Processed per Second (Throughput)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(events_processed_total[1m])",
+          "legendFormat": "{{event_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"lineWidth": 2}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Cassandra Write Errors (total)",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 8, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "cassandra_write_errors_total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 1,    "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Event Processing Duration (p99)",
+      "type": "timeseries",
+      "gridPos": {"x": 6, "y": 8, "w": 12, "h": 4},
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.99, rate(event_processing_duration_seconds_bucket[1m]))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s"}
+      }
+    },
+    {
+      "id": 5,
+      "title": "DLQ Events Total",
+      "type": "stat",
+      "gridPos": {"x": 18, "y": 8, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(dlq_events_total)",
+          "legendFormat": "DLQ"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 1,    "color": "yellow"},
+              {"value": 10,   "color": "red"}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "time": {"from": "now-15m", "to": "now"}
+}
