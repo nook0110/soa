@@ -1,0 +1,33 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+scrape_configs:
+  # ── Warehouse consumer service ──────────────────────────────────────────
+  - job_name: "warehouse-consumer"
+    static_configs:
+      - targets: ["consumer:8000"]
+    metrics_path: /metrics
+
+  # ── Prometheus itself ───────────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Kafka exporter ──────────────────────────────────────────────────────
+  - job_name: "kafka"
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+
+  # ── Cassandra exporter ──────────────────────────────────────────────────
+  - job_name: "cassandra"
+    static_configs:
+      - targets: ["cassandra-exporter:9500"]
