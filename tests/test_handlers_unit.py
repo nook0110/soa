@@ -87,7 +87,8 @@ sys.modules["fastapi"] = fastapi_mod
 sys.modules["uvicorn"] = types.ModuleType("uvicorn")
 
 # ── Now import the modules under test ────────────────────────────────────
-sys.path.insert(0, "/home/blokhtin/github/soa/consumer")
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "consumer"))
 
 # We patch db at the module level
 import importlib

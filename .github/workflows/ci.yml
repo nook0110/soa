@@ -49,7 +49,7 @@ jobs:
         run: |
           pip install pytest pytest-timeout
           # Install a minimal subset of consumer deps needed by unit tests
-          pip install prometheus-client fastapi
+          pip install prometheus-client fastapi cassandra-driver
 
       - name: Run unit tests
         run: pytest tests/test_handlers_unit.py -v --timeout=30
