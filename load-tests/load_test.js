@@ -67,7 +67,7 @@ export default function () {
       try {
         const body = JSON.parse(r.body);
         return body.status !== undefined;
-      } catch {
+      } catch (e) {
         return false;
       }
     },
