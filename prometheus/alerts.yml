@@ -1,0 +1,105 @@
+groups:
+  - name: warehouse.service
+    interval: 30s
+    rules:
+
+      # ── High error rate on DLQ ─────────────────────────────────────────
+      # Fires when > 5% of processed events end up in the DLQ over 5 minutes.
+      # Rationale: normal operation has 0 DLQ events; 5% indicates a systematic
+      # validation or deserialization problem.
+      - alert: HighDLQRate
+        expr: |
+          (
+            rate(dlq_events_total[5m])
+            /
+            (rate(events_processed_total[5m]) + rate(dlq_events_total[5m]) + 0.0001)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High DLQ rate on warehouse consumer"
+          description: >
+            DLQ rate is {{ $value | humanizePercentage }} over the last 5 minutes.
+            Threshold: 5%. Check consumer logs for validation/deserialization errors.
+
+      # ── High event processing latency ────────────────────────────────────
+      # p95 processing time > 1 second for 5 minutes.
+      # Rationale: normal Cassandra writes take < 100ms; 1s sustained indicates
+      # Cassandra cluster pressure or network issues.
+      - alert: HighEventProcessingLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(event_processing_duration_seconds_bucket[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High event processing p95 latency"
+          description: >
+            p95 processing latency is {{ $value | humanizeDuration }}.
+            Threshold: 1s. Check Cassandra performance.
+
+      # ── Consumer lag growing ──────────────────────────────────────────────
+      # Consumer lag > 1000 messages for > 5 minutes.
+      # Rationale: a lag spike > 1000 means the consumer is more than a few
+      # minutes behind the producer at normal throughput (~10 events/s).
+      - alert: HighConsumerLag
+        expr: |
+          sum(consumer_lag) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag is too high"
+          description: >
+            Total consumer lag is {{ $value }} messages.
+            Threshold: 1000. Consumer may be stuck or underprovisioned.
+
+      # ── Service down (target unreachable) ─────────────────────────────────
+      # Prometheus can't scrape the consumer for > 1 minute.
+      - alert: WarehouseConsumerDown
+        expr: up{job="warehouse-consumer"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Warehouse consumer is down"
+          description: >
+            Prometheus cannot scrape warehouse-consumer at {{ $labels.instance }}.
+            The service may have crashed.
+
+      # ── High HTTP error rate ──────────────────────────────────────────────
+      # > 5% of HTTP requests return 4xx/5xx for > 5 minutes.
+      - alert: HighHTTPErrorRate
+        expr: |
+          (
+            rate(http_request_errors_total[5m])
+            /
+            (rate(http_requests_total[5m]) + 0.0001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate on warehouse consumer"
+          description: >
+            HTTP error rate is {{ $value | humanizePercentage }}.
+            Threshold: 5%.
+
+      # ── High HTTP p95 latency ─────────────────────────────────────────────
+      # p95 HTTP latency > 500ms for > 5 minutes (SLO failure threshold).
+      - alert: HighHTTPLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP p95 latency on warehouse consumer"
+          description: >
+            HTTP p95 latency is {{ $value | humanizeDuration }}.
+            SLO threshold: 500ms.
